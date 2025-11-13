@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getChatResponse, findNearbyHospitals, getChatHistory } from '../services/geminiService';
+import ConversationSidebar from './ConversationSidebar';
 import { ChatMessage, Hospital } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -114,6 +115,20 @@ const ChatAssistant: React.FC = () => {
       }
     })();
     return () => { mounted = false; };
+  }, []);
+
+  // Load a selected conversation (rows from backend) into the chat view
+  const handleLoadConversation = useCallback((rows: Array<{ id:number; role:string; message:string; metadata:any; created_at:string }>) => {
+    if (!rows || rows.length === 0) return;
+    const display: DisplayMessage[] = rows.map(r => ({ text: r.message, sender: r.role === 'ai' ? 'ai' : 'user' }));
+    setDisplayMessages(display);
+    const historyMsgs: ChatMessage[] = rows.map(r => ({ role: r.role === 'ai' ? 'model' : 'user', parts: [{ text: r.message }] }));
+    setChatHistory(historyMsgs);
+  }, []);
+
+  const handleNewConversation = useCallback(() => {
+    setChatHistory([]);
+    setDisplayMessages([{ sender: 'ai', text: "Hello! I'm your AI health assistant. How can I help you today? Please remember, I'm not a doctor." }]);
   }, []);
 
   const stopAudio = useCallback(() => {
@@ -318,12 +333,43 @@ const ChatAssistant: React.FC = () => {
   // FIX: Property 'SpeechRecognition' does not exist on type 'Window & typeof globalThis'.
   const isSpeechRecognitionSupported = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
+  // Mobile drawer state and scroll shadow
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleMessagesScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop;
+    setIsScrolled(top > 6);
+  };
+
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-xl font-bold text-center text-gray-900 dark:text-white">AI Health Assistant</h2>
-      </div>
-      <div className="flex-grow p-4 overflow-y-auto">
+    <div className="flex h-full w-full min-h-0">
+      {/* Desktop sidebar (visible on md+) */}
+      <ConversationSidebar onLoadConversation={handleLoadConversation} onNewConversation={handleNewConversation} />
+
+      {/* Mobile drawer: shows when sidebarOpen is true */}
+      {sidebarOpen && (
+        <>
+          <div className="fixed inset-0 z-40 drawer-backdrop md:hidden" onClick={() => setSidebarOpen(false)} />
+          <div className="fixed left-0 top-0 bottom-0 z-50 md:hidden w-72">
+            <ConversationSidebar onLoadConversation={handleLoadConversation} onNewConversation={handleNewConversation} onClose={() => setSidebarOpen(false)} className="flex md:hidden" />
+          </div>
+        </>
+      )}
+
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
+        <div className={`h-14 flex items-center px-4 border-b border-gray-200 dark:border-gray-700 ${isScrolled ? 'shadow-md' : ''}`}>
+          <div className="md:hidden">
+            <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 mr-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-900 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+          <h2 className="text-lg font-bold text-center text-gray-900 dark:text-white flex-1">AI Health Assistant</h2>
+        </div>
+      <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 p-4 overflow-y-auto min-h-0 custom-scroll">
         <div className="space-y-4">
           {displayMessages.map((msg, index) => (
             <div key={index} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -469,6 +515,7 @@ const ChatAssistant: React.FC = () => {
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 };
