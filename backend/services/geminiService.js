@@ -1,11 +1,23 @@
 const { GoogleGenAI, Type, Modality } = require("@google/genai");
 require('dotenv').config();
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set in backend .env");
+// Support multiple API keys for different purposes. Fall back to single API_KEY when specific ones are not provided.
+const ANALYZE_API_KEY = process.env.ANALYZE_API_KEY || process.env.API_KEY;
+const SYMPTOMS_API_KEY = process.env.SYMPTOMS_API_KEY || process.env.API_KEY;
+const CHAT_API_KEY = process.env.CHAT_API_KEY || process.env.API_KEY;
+const TTS_API_KEY = process.env.TTS_API_KEY || process.env.API_KEY;
+const MAPS_API_KEY = process.env.MAPS_API_KEY || process.env.API_KEY;
+
+if (!ANALYZE_API_KEY && !SYMPTOMS_API_KEY && !CHAT_API_KEY && !TTS_API_KEY && !MAPS_API_KEY) {
+    throw new Error("No API keys found. Set ANALYZE_API_KEY, SYMPTOMS_API_KEY, CHAT_API_KEY, TTS_API_KEY or API_KEY in backend .env");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Create separate clients so different keys can be used for different features.
+const aiAnalyze = new GoogleGenAI({ apiKey: ANALYZE_API_KEY });
+const aiSymptoms = new GoogleGenAI({ apiKey: SYMPTOMS_API_KEY });
+const aiChat = new GoogleGenAI({ apiKey: CHAT_API_KEY });
+const aiTTS = new GoogleGenAI({ apiKey: TTS_API_KEY });
+const aiMaps = new GoogleGenAI({ apiKey: MAPS_API_KEY });
 
 /**
  * A helper function to retry an async operation with exponential backoff.
@@ -92,7 +104,7 @@ const analyzeHealthReport = async ({ reportText, fileData }) => {
             throw new Error("No report data provided to analyze.");
         }
 
-        const response = await retryWithBackoff(() => ai.models.generateContent({
+        const response = await retryWithBackoff(() => aiAnalyze.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: contents,
             config: {
@@ -123,7 +135,7 @@ const textToSpeech = async (text, voiceName = 'Zephyr') => {
     try {
         const prompt = `Say: ${text}`;
         
-        const response = await retryWithBackoff(() => ai.models.generateContent({
+        const response = await retryWithBackoff(() => aiTTS.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
             contents: [{ parts: [{ text: prompt }] }],
             config: {
@@ -152,13 +164,13 @@ const textToSpeech = async (text, voiceName = 'Zephyr') => {
 const getChatResponse = async (message, history = [], userContext = null, voiceConfig = { enabled: false, voice: 'Zephyr' }) => {
     const model = 'gemini-2.5-flash';
 
-    let systemInstruction = 'You are a friendly and helpful AI health assistant providing information relevant to Nepal. You can answer general health questions. When providing emergency contact information, use Nepali emergency numbers (e.g., Police: 100, Ambulance: 102). You are not a doctor and must always remind the user to consult a healthcare professional for medical advice. Keep your answers concise and easy to understand.';
+    let systemInstruction = 'You are a friendly and helpful AI health assistant providing information relevant to Nepal. You can answer general health questions. When providing emergency contact information, use Nepali emergency numbers (e.g., Police: 100, Ambulance: 102). You are not a doctor and must always remind the user to consult a healthcare professional for medical advice. Keep your answers concise and easy to understand. Do Not Reply if User Answers are Inappropriate or Irrelevant or out of Context. Answer only Medical Related Questions.';
 
     if (userContext) {
         systemInstruction += ` Personalize your response for the following user: Age: ${userContext.age}, Weight: ${userContext.weight || 'N/A'}kg. Pre-existing conditions: ${userContext.medical_conditions || 'None'}. Current symptoms: ${userContext.symptoms || 'None'}.`;
     }
 
-    const chat = ai.chats.create({
+    const chat = aiChat.chats.create({
         model,
         config: {
             systemInstruction,
@@ -207,7 +219,7 @@ const predictSymptomsFromText = async (symptomsText) => {
     try {
         const prompt = `You are an AI Symptom Checker. Analyze the following symptoms and provide a list of potential diseases. For each disease, include its probability, a brief description, and the recommended medical specialist. IMPORTANT: This is for informational purposes only and is not a substitute for professional medical advice. Symptoms: "${symptomsText}"`;
 
-        const response = await retryWithBackoff(() => ai.models.generateContent({
+        const response = await retryWithBackoff(() => aiSymptoms.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -254,7 +266,7 @@ const findHospitalsNearLocation = async ({ latitude, longitude, query }) => {
             throw new Error("No location data provided to find hospitals.");
         }
         
-        const response = await retryWithBackoff(() => ai.models.generateContent({
+        const response = await retryWithBackoff(() => aiMaps.models.generateContent({
             model: "gemini-2.5-flash",
             contents,
             config,
@@ -311,7 +323,7 @@ const generateHealthTips = async (analysisData) => {
             Generate the tips according to the JSON schema.
         `;
 
-        const response = await retryWithBackoff(() => ai.models.generateContent({
+        const response = await retryWithBackoff(() => aiAnalyze.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
