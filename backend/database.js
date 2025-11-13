@@ -41,6 +41,21 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
                 // Table already created
             }
         });
+
+        db.exec(`CREATE TABLE IF NOT EXISTS chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            role TEXT,
+            message TEXT,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+            )`,
+        (err) => {
+            if (err) {
+                // Table already created
+            }
+        });
     }
 });
 

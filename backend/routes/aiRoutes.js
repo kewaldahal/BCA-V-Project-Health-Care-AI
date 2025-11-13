@@ -97,12 +97,50 @@ router.post('/chat', async (req, res) => {
         }
         
         try {
+            // Persist the user's message
+            try {
+                const insertSql = `INSERT INTO chats (user_id, role, message, metadata) VALUES (?,?,?,?)`;
+                db.run(insertSql, [userId, 'user', message, JSON.stringify({ fromFrontend: true })], function(insertErr) {
+                    if (insertErr) console.error('DB error inserting user chat:', insertErr.message);
+                });
+            } catch (dbErr) {
+                console.error('Unexpected DB error saving user message:', dbErr);
+            }
+
             const responseData = await getChatResponse(message, history, userContext, voiceConfig);
+
+            // Persist the AI response
+            try {
+                const aiText = responseData.response || '';
+                const insertSql2 = `INSERT INTO chats (user_id, role, message, metadata) VALUES (?,?,?,?)`;
+                db.run(insertSql2, [userId, 'ai', aiText, JSON.stringify({ generatedBy: 'gemini' })], function(insertErr) {
+                    if (insertErr) console.error('DB error inserting ai chat:', insertErr.message);
+                });
+            } catch (dbErr) {
+                console.error('Unexpected DB error saving ai message:', dbErr);
+            }
+
             res.json(responseData);
         } catch (error) {
             console.error("Error in /chat route:", error);
             res.status(500).json({ error: error.message });
         }
+    });
+});
+
+
+// Return chat history for the authenticated user
+router.get('/chats', (req, res) => {
+    const userId = req.user.id;
+    const sql = `SELECT id, role, message, metadata, created_at FROM chats WHERE user_id = ? ORDER BY created_at ASC`;
+    db.all(sql, [userId], (err, rows) => {
+        if (err) {
+            console.error('DB error fetching chats:', err.message);
+            return res.status(500).json({ error: 'Failed to fetch chat history.' });
+        }
+        // Parse metadata JSON where present
+        const chats = (rows || []).map(r => ({ id: r.id, role: r.role, message: r.message, metadata: r.metadata ? JSON.parse(r.metadata) : null, created_at: r.created_at }));
+        res.json({ chats });
     });
 });
 

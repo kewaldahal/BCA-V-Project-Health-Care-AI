@@ -65,6 +65,23 @@ export const getChatResponse = async (prompt: string, history: ChatMessage[], vo
     }
 };
 
+export const getChatHistory = async (): Promise<Array<{ id: number; role: string; message: string; metadata: any; created_at: string }>> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/ai/chats`, {
+            method: 'GET',
+            headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to fetch chat history.');
+        }
+        return data.chats || [];
+    } catch (error) {
+        console.error('Error in getChatHistory:', error);
+        throw error;
+    }
+};
+
 export const getUserProfile = async (): Promise<ProfileData> => {
     try {
         const response = await fetch(`${API_BASE_URL}/ai/profile`, {

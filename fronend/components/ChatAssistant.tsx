@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getChatResponse, findNearbyHospitals } from '../services/geminiService';
+import { getChatResponse, findNearbyHospitals, getChatHistory } from '../services/geminiService';
 import { ChatMessage, Hospital } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -91,6 +91,30 @@ const ChatAssistant: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [displayMessages]);
+
+  // Load persisted chat history for the logged-in user
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const rows = await getChatHistory();
+        if (!mounted) return;
+        if (rows && rows.length) {
+          const display: DisplayMessage[] = rows.map(r => ({ text: r.message, sender: r.role === 'ai' ? 'ai' : 'user' }));
+          setDisplayMessages(display);
+          // Build chatHistory for context (role 'user' or 'model')
+          const historyMsgs: ChatMessage[] = rows.map(r => ({
+            role: r.role === 'ai' ? 'model' : 'user',
+            parts: [{ text: r.message }]
+          }));
+          setChatHistory(historyMsgs);
+        }
+      } catch (e) {
+        console.warn('Could not load chat history:', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const stopAudio = useCallback(() => {
     if (currentAudioSourceRef.current) {
