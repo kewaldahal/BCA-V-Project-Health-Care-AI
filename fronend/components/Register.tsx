@@ -53,34 +53,34 @@ const Register: React.FC<RegisterProps> = ({ onRegister, switchToLogin, error })
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Full Name</label>
-                            <input name="name" type="text" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                            <input name="name" type="text" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Email</label>
-                            <input name="email" type="email" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                            <input name="email" type="email" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Password</label>
-                            <input name="password" type="password" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                            <input name="password" type="password" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Age</label>
-                            <input name="age" type="number" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                            <input name="age" type="number" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Weight (kg)</label>
-                            <input name="weight" type="number" step="0.1" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                            <input name="weight" type="number" step="0.1" required onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"/>
                         </div>
                     </div>
                     
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Pre-existing Medical Conditions (optional)</label>
-                        <textarea name="medical_conditions" rows={2} onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="e.g., Diabetes, Hypertension"></textarea>
+                        <textarea name="medical_conditions" rows={2} onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="e.g., Diabetes, Hypertension"></textarea>
                     </div>
 
                      <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Current Symptoms (optional)</label>
-                        <textarea name="symptoms" rows={2} onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="e.g., Headache, Fatigue"></textarea>
+                        <textarea name="symptoms" rows={2} onChange={handleChange} className="w-full px-3 py-2 mt-1 bg-gray-50 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="e.g., Headache, Fatigue"></textarea>
                     </div>
 
                     <div>
