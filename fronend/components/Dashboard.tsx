@@ -54,6 +54,78 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
     }
   };
 
+  // Map disease names / keywords to recommended medical specialists
+  const mapDiseaseToSpecialist = (disease: string): string | null => {
+    const d = disease.toLowerCase();
+    if (d.includes('heart') || d.includes('cardio') || d.includes('cholesterol') || d.includes('angina') || d.includes('myocard')) return 'Cardiologist';
+    if (d.includes('stroke') || d.includes('brain') || d.includes('neurol')) return 'Neurologist';
+    if (d.includes('diabet') || d.includes('insulin') || d.includes('blood sugar')) return 'Endocrinologist';
+    if (d.includes('lung') || d.includes('breath') || d.includes('asthma') || d.includes('pneum')) return 'Pulmonologist';
+    if (d.includes('eye') || d.includes('vision') || d.includes('ocular')) return 'Ophthalmologist';
+    if (d.includes('ear') || d.includes('throat') || d.includes('nose') || d.includes('sinus')) return 'ENT Specialist';
+    if (d.includes('kidney') || d.includes('renal') || d.includes('neph')) return 'Nephrologist';
+    if (d.includes('liver') || d.includes('hepatic') || d.includes('hepat')) return 'Hepatologist';
+    if (d.includes('cancer') || d.includes('tumor') || d.includes('malignan')) return 'Oncologist';
+    if (d.includes('skin') || d.includes('rash') || d.includes('derma')) return 'Dermatologist';
+    if (d.includes('bone') || d.includes('joint') || d.includes('fracture') || d.includes('arthritis')) return 'Orthopedic Surgeon';
+    if (d.includes('child') || d.includes('pediatr')) return 'Pediatrician';
+    if (d.includes('eye') || d.includes('ocular')) return 'Ophthalmologist';
+    if (d.includes('mental') || d.includes('depress') || d.includes('anxiety') || d.includes('psychi')) return 'Psychiatrist';
+    // default fallback
+    return null;
+  };
+
+  const getRecommendedSpecialists = (): string[] => {
+    if (!analysisResult || !analysisResult.predictions) return [];
+    const specialistsSet = new Set<string>();
+    // look at top 3 predictions to decide specialists
+    analysisResult.predictions.slice(0, 3).forEach(p => {
+      const s = mapDiseaseToSpecialist(p.disease);
+      if (s) specialistsSet.add(s);
+    });
+    return Array.from(specialistsSet);
+  };
+
+  // Search hospitals filtered by specialist (invokes existing API)
+  const handleFindBySpecialist = async (specialist: string) => {
+    setIsLoadingHospitals(true);
+    setHospitalError(null);
+    setHospitalResult(null);
+    setShowManualHospitalInput(false);
+
+    const specialistQuery = `Find hospitals or clinics with ${specialist} services or ${specialist} specialists`; 
+
+    try {
+      // Try geolocation first
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const data = await findNearbyHospitals({ lat: latitude, lon: longitude, query: specialistQuery });
+            setHospitalResult(data);
+          } catch (err: any) {
+            setHospitalError(err.message || 'Failed to search hospitals for specialist.');
+          } finally {
+            setIsLoadingHospitals(false);
+          }
+        }, (geoErr) => {
+          // fallback to manual input if geolocation denied
+          setIsLoadingHospitals(false);
+          setHospitalError('Location access denied. Enter your city to search for specialists.');
+          setShowManualHospitalInput(true);
+        }, { timeout: 8000 });
+      } else {
+        // No geolocation available, show manual input and use specialist query when provided
+        setIsLoadingHospitals(false);
+        setHospitalError('Geolocation not available. Enter your city to search for specialists.');
+        setShowManualHospitalInput(true);
+      }
+    } catch (e) {
+      setIsLoadingHospitals(false);
+      setHospitalError('An unexpected error occurred while searching for specialists.');
+    }
+  };
+
   const handleFindHospitals = () => {
     if (!navigator.geolocation) {
         setHospitalError("Geolocation is not supported by your browser. Please enter your location manually.");
@@ -204,6 +276,25 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
                         )}
                     </div>
                     
+                    {/* Recommended specialists (derived from AI predictions) */}
+                    {analysisResult && analysisResult.predictions.length > 0 && (
+                      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
+                        <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Recommended Specialists</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">Based on your report, the following specialist(s) are recommended. Click to find nearby hospitals offering these services.</p>
+                        <div className="flex flex-wrap gap-3">
+                          {getRecommendedSpecialists().length > 0 ? (
+                            getRecommendedSpecialists().map((spec, idx) => (
+                              <button key={idx} onClick={() => handleFindBySpecialist(spec)} className="px-4 py-2 bg-red-600 text-white rounded-lg shadow-sm hover:bg-red-700">
+                                {spec}
+                              </button>
+                            ))
+                          ) : (
+                            <p className="text-gray-600 dark:text-gray-300">No specific specialist identified. You can search hospitals related to your conditions.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     { (isLoadingHospitals || hospitalResult || hospitalError) && (
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
                             <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
