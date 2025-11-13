@@ -1,0 +1,5 @@
+{
+  "name": "Health AI",
+  "description": "An AI-powered health platform that uses the Gemini API to analyze health reports, predict potential diseases, and calculate a health score, presented in a modern, responsive dashboard.",
+  "requestFramePermissions": []
+}

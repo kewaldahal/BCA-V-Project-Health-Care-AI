@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Health AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load PDF.js BEFORE import maps -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js"></script>
+    <script>
+      // Configure PDF.js worker immediately after loading
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
+      }
+    </script>
+    
+    <!-- Import maps for modern module imports -->
+    <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "jwt-decode": "https://aistudiocdn.com/jwt-decode@^4.0.0"
+  }
+}
+    </script>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-900">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
