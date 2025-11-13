@@ -80,25 +80,25 @@ router.post('/analyze', async (req, res) => {
 
 
 router.post('/chat', async (req, res) => {
-    const { message, history } = req.body;
+    const { message, history, voiceConfig } = req.body;
     const userId = req.user.id;
 
     if (!message) {
         return res.status(400).json({ error: "Message is required." });
     }
 
-
+    // Fetch user context for personalization
     const userSql = "SELECT age, weight, medical_conditions, symptoms FROM users WHERE id = ?";
     db.get(userSql, [userId], async (err, userContext) => {
         if (err) {
             console.error("DB error fetching user context:", err.message);
-
+            // Proceed without personalization if user fetch fails
             userContext = null; 
         }
         
         try {
-            const responseText = await getChatResponse(message, history, userContext);
-            res.json({ response: responseText });
+            const responseData = await getChatResponse(message, history, userContext, voiceConfig);
+            res.json(responseData);
         } catch (error) {
             console.error("Error in /chat route:", error);
             res.status(500).json({ error: error.message });
@@ -145,7 +145,7 @@ router.get('/latest-analysis', (req, res) => {
         if (!row) {
             return res.status(404).json({ error: "No analysis found." });
         }
-        
+        // The DB stores predictions and recommendations as JSON strings
         const result = {
             ...row,
             predictions: JSON.parse(row.predictions || '[]'),

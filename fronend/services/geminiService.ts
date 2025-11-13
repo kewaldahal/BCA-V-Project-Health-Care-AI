@@ -1,12 +1,18 @@
 // Implementing the service to handle API calls to the backend.
-import { HealthReportAnalysis, ProfileData, SymptomPrediction, Hospital, HospitalFinderResult, User } from '../types';
+import { HealthReportAnalysis, ProfileData, SymptomPrediction, Hospital, HospitalFinderResult, User, ChatMessage } from '../types';
 
 const API_BASE_URL = 'http://localhost:3001';
 
-interface Message {
-  role: 'user' | 'model';
-  parts: { text: string }[];
+interface VoiceConfig {
+    enabled: boolean;
+    voice: string;
 }
+
+interface ChatResponse {
+    response: string;
+    audio?: string; // audio is base64 string
+}
+
 
 // A helper to get the auth token and create headers
 const getAuthHeaders = (): Record<string, string> => {
@@ -40,19 +46,19 @@ export const analyzeHealthReport = async (payload: { reportText?: string; fileDa
     }
 };
 
-export const getChatResponse = async (prompt: string, history: Message[]): Promise<string> => {
+export const getChatResponse = async (prompt: string, history: ChatMessage[], voiceConfig: VoiceConfig): Promise<ChatResponse> => {
     try {
         const response = await fetch(`${API_BASE_URL}/ai/chat`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ message: prompt, history }),
+            body: JSON.stringify({ message: prompt, history, voiceConfig }),
         });
 
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.error || 'Failed to get chat response.');
         }
-        return data.response;
+        return data;
     } catch (error) {
         console.error("Error in getChatResponse:", error);
         throw error;

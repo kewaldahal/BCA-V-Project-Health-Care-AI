@@ -64,3 +64,8 @@ export interface HospitalFinderResult {
   summary: string;
   hospitals: Hospital[];
 }
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  parts: { text: string }[];
+}

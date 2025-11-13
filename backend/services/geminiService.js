@@ -1,4 +1,4 @@
-const { GoogleGenAI, Type } = require("@google/genai");
+const { GoogleGenAI, Type, Modality } = require("@google/genai");
 require('dotenv').config();
 
 if (!process.env.API_KEY) {
@@ -25,9 +25,9 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
             if (error.status && error.status >= 500 && error.status < 600) {
                 console.warn(`Attempt ${i + 1} failed with status ${error.status}. Retrying in ${delay}ms...`);
                 await new Promise(res => setTimeout(res, delay));
-                delay *= 2;
+                delay *= 2; // Exponential backoff
             } else {
-                
+                // Don't retry on client errors (4xx) or other non-retryable issues
                 throw error;
             }
         }
@@ -119,7 +119,37 @@ const analyzeHealthReport = async ({ reportText, fileData }) => {
     }
 };
 
-const getChatResponse = async (message, history = [], userContext = null) => {
+const textToSpeech = async (text, voiceName = 'Zephyr') => {
+    try {
+        const prompt = `Say: ${text}`;
+        
+        const response = await retryWithBackoff(() => ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text: prompt }] }],
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: voiceName },
+                    },
+                },
+            },
+        }));
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!base64Audio) {
+            throw new Error("No audio data received from TTS API.");
+        }
+        return base64Audio;
+
+    } catch (error) {
+        console.error("Error generating speech with Gemini TTS:", error);
+        // Return null instead of throwing, so the chat can still proceed with text.
+        return null;
+    }
+};
+
+const getChatResponse = async (message, history = [], userContext = null, voiceConfig = { enabled: false, voice: 'Zephyr' }) => {
     const model = 'gemini-2.5-flash';
 
     let systemInstruction = 'You are a friendly and helpful AI health assistant providing information relevant to Nepal. You can answer general health questions. When providing emergency contact information, use Nepali emergency numbers (e.g., Police: 100, Ambulance: 102). You are not a doctor and must always remind the user to consult a healthcare professional for medical advice. Keep your answers concise and easy to understand.';
@@ -138,7 +168,14 @@ const getChatResponse = async (message, history = [], userContext = null) => {
 
     try {
         const response = await retryWithBackoff(() => chat.sendMessage({ message }));
-        return response.text;
+        const responseText = response.text;
+
+        let audioContent = null;
+        if (voiceConfig.enabled && responseText) {
+            audioContent = await textToSpeech(responseText, voiceConfig.voice);
+        }
+
+        return { response: responseText, audio: audioContent };
     } catch (error) {
         console.error("Error getting chat response:", error);
         throw new Error("Could not get a response from the assistant.");

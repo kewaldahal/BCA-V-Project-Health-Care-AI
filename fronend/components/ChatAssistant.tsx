@@ -1,25 +1,82 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getChatResponse } from '../services/geminiService';
+import { ChatMessage } from '../types';
 import { BotIcon } from './icons/BotIcon';
+import { VolumeOnIcon } from './icons/VolumeOnIcon';
+import { VolumeOffIcon } from './icons/VolumeOffIcon';
+import { StopCircleIcon } from './icons/StopCircleIcon';
+import { MicrophoneIcon } from './icons/MicrophoneIcon';
 
-interface Message {
-  role: 'user' | 'model';
-  parts: { text: string }[];
+
+// Helper functions for audio decoding (from Gemini docs)
+function decode(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
 }
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
 
 interface DisplayMessage {
   text: string;
   sender: 'user' | 'ai';
 }
 
+const VOICES = [
+    { name: 'English - Female', id: 'Zephyr' },
+    { name: 'English - Male', id: 'Kore' },
+    // As requested, providing English voice options. Gemini TTS has a wide range of voices.
+];
+
+const SPEECH_LANGUAGES = [
+    { name: 'English', id: 'en-US' },
+    { name: 'Nepali', id: 'ne-NP' },
+];
+
 const ChatAssistant: React.FC = () => {
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([
     { sender: 'ai', text: "Hello! I'm your AI health assistant. How can I help you today? Please remember, I'm not a doctor." }
   ]);
-  const [chatHistory, setChatHistory] = useState<Message[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Voice Output State
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState<boolean>(true);
+  const [selectedVoice, setSelectedVoice] = useState<string>(VOICES[0].id);
+  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Voice Input State
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [speechLang, setSpeechLang] = useState<string>(SPEECH_LANGUAGES[0].id);
+  const recognitionRef = useRef<any>(null); // Using `any` for browser compatibility (e.g., webkitSpeechRecognition)
+  const finalTranscriptRef = useRef<string>('');
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -29,31 +86,157 @@ const ChatAssistant: React.FC = () => {
     scrollToBottom();
   }, [displayMessages]);
 
+  const stopAudio = useCallback(() => {
+    if (currentAudioSourceRef.current) {
+        currentAudioSourceRef.current.stop();
+        currentAudioSourceRef.current.disconnect();
+        currentAudioSourceRef.current = null;
+    }
+    setIsPlayingAudio(false);
+  }, []);
+
+  const playAudio = useCallback(async (base64Audio: string) => {
+    stopAudio(); 
+    
+    if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended') {
+        ctx.resume();
+    }
+    
+    try {
+        setIsPlayingAudio(true);
+        const audioBytes = decode(base64Audio);
+        const audioBuffer = await decodeAudioData(audioBytes, ctx, 24000, 1);
+        
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        
+        source.onended = () => {
+            setIsPlayingAudio(false);
+            if (currentAudioSourceRef.current === source) {
+                currentAudioSourceRef.current = null;
+            }
+        };
+        
+        source.start();
+        currentAudioSourceRef.current = source;
+    } catch (e) {
+        console.error("Error playing audio:", e);
+        setIsPlayingAudio(false);
+    }
+  }, [stopAudio]);
+
   const handleSend = useCallback(async () => {
     if (input.trim() === '' || isLoading) return;
+
+    stopAudio();
 
     const userDisplayMessage: DisplayMessage = { text: input, sender: 'user' };
     setDisplayMessages(prev => [...prev, userDisplayMessage]);
     
-    const userMessage: Message = { role: 'user', parts: [{ text: input }] };
+    const userMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
     const currentHistory = [...chatHistory, userMessage];
 
     setInput('');
     setIsLoading(true);
 
     try {
-      const aiResponse = await getChatResponse(input, currentHistory);
+       const { response: aiResponse, audio: audioContent } = await getChatResponse(
+          input, 
+          currentHistory, 
+          { enabled: isVoiceEnabled, voice: selectedVoice }
+      );
+
       const aiDisplayMessage: DisplayMessage = { text: aiResponse, sender: 'ai' };
-      const aiMessage: Message = { role: 'model', parts: [{ text: aiResponse }] };
+      const aiMessage: ChatMessage = { role: 'model', parts: [{ text: aiResponse }] };
       setDisplayMessages(prev => [...prev, aiDisplayMessage]);
       setChatHistory([...currentHistory, aiMessage]);
+
+      if (audioContent) {
+          playAudio(audioContent);
+      }
+
     } catch (error) {
       const errorMessage: DisplayMessage = { text: 'Sorry, I encountered an error. Please try again.', sender: 'ai' };
       setDisplayMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, chatHistory]);
+  }, [input, isLoading, chatHistory, stopAudio, isVoiceEnabled, selectedVoice, playAudio]);
+
+  // Setup Speech Recognition
+  useEffect(() => {
+    // FIX: Property 'SpeechRecognition' does not exist on type 'Window & typeof globalThis'.
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Speech Recognition not supported by this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = speechLang;
+
+    // FIX: Cannot find name 'SpeechRecognitionEvent'. Did you mean 'SpeechRecognitionResult'?
+    recognition.onresult = (event: any) => {
+        let interim_transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscriptRef.current += event.results[i][0].transcript + ' ';
+            } else {
+                interim_transcript += event.results[i][0].transcript;
+            }
+        }
+        setInput(finalTranscriptRef.current + interim_transcript);
+    };
+
+    // FIX: Cannot find name 'SpeechRecognitionErrorEvent'. Did you mean 'SpeechRecognitionResult'?
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+    
+    recognitionRef.current = recognition;
+
+    return () => {
+        recognition.stop();
+    };
+  }, [speechLang]);
+
+  const handleMicClick = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    if (isListening) {
+      recognition.stop();
+    } else {
+      finalTranscriptRef.current = '';
+      setInput('');
+      recognition.start();
+      setIsListening(true);
+    }
+  };
+
+
+  useEffect(() => {
+    return () => {
+        stopAudio();
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            audioContextRef.current.close();
+        }
+    };
+  }, [stopAudio]);
+
+  // FIX: Property 'SpeechRecognition' does not exist on type 'Window & typeof globalThis'.
+  const isSpeechRecognitionSupported = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
@@ -91,17 +274,73 @@ const ChatAssistant: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+         <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+                <button onClick={() => setIsVoiceEnabled(!isVoiceEnabled)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label={isVoiceEnabled ? 'Disable voice output' : 'Enable voice output'}>
+                    {isVoiceEnabled ? <VolumeOnIcon className="w-6 h-6 text-red-500"/> : <VolumeOffIcon className="w-6 h-6 text-gray-500"/>}
+                </button>
+                <select
+                    value={selectedVoice}
+                    onChange={(e) => setSelectedVoice(e.target.value)}
+                    disabled={!isVoiceEnabled}
+                    className="bg-gray-100 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-lg text-sm px-3 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:opacity-50 transition-opacity"
+                    aria-label="Select voice"
+                >
+                    {VOICES.map(voice => (
+                        <option key={voice.id} value={voice.id}>{voice.name}</option>
+                    ))}
+                </select>
+            </div>
+
+            {isSpeechRecognitionSupported && (
+                <div className="flex items-center gap-2">
+                     <label htmlFor="speech-lang" className="text-sm text-gray-600 dark:text-gray-300">Listen In:</label>
+                     <select
+                        id="speech-lang"
+                        value={speechLang}
+                        onChange={(e) => setSpeechLang(e.target.value)}
+                        className="bg-gray-100 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-lg text-sm px-3 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                        aria-label="Select speech recognition language"
+                    >
+                        {SPEECH_LANGUAGES.map(lang => (
+                            <option key={lang.id} value={lang.id}>{lang.name}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            {isPlayingAudio && (
+                <button onClick={stopAudio} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                    <StopCircleIcon className="w-5 h-5"/> Stop Audio
+                </button>
+            )}
+        </div>
         <div className="flex items-center space-x-2">
           <input
             type="text"
             className="flex-grow p-3 bg-gray-100 dark:bg-black border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
-            placeholder="Ask a health question..."
+            placeholder={isListening ? 'Listening...' : 'Ask a health question...'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             disabled={isLoading}
           />
+          {isSpeechRecognitionSupported && (
+             <button
+                type="button"
+                onClick={handleMicClick}
+                disabled={isLoading}
+                className={`p-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 disabled:opacity-50 ${
+                    isListening
+                    ? 'bg-red-600 text-white animate-pulse'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+                aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+            >
+                <MicrophoneIcon className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={handleSend}
             disabled={isLoading || input.trim() === ''}
