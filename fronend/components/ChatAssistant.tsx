@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getChatResponse } from '../services/geminiService';
-import { ChatMessage } from '../types';
+import { getChatResponse, findNearbyHospitals } from '../services/geminiService';
+import { ChatMessage, Hospital } from '../types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { BotIcon } from './icons/BotIcon';
 import { VolumeOnIcon } from './icons/VolumeOnIcon';
 import { VolumeOffIcon } from './icons/VolumeOffIcon';
@@ -63,6 +65,10 @@ const ChatAssistant: React.FC = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [emergencyHospitals, setEmergencyHospitals] = useState<Hospital[] | null>(null);
+  const [emergencySummary, setEmergencySummary] = useState<string | null>(null);
+  const [isSearchingHospitals, setIsSearchingHospitals] = useState(false);
 
   // Voice Output State
   const [isVoiceEnabled, setIsVoiceEnabled] = useState<boolean>(true);
@@ -135,14 +141,16 @@ const ChatAssistant: React.FC = () => {
 
     stopAudio();
 
-    const userDisplayMessage: DisplayMessage = { text: input, sender: 'user' };
-    setDisplayMessages(prev => [...prev, userDisplayMessage]);
-    
-    const userMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
-    const currentHistory = [...chatHistory, userMessage];
+  const sentText = input.trim();
 
-    setInput('');
-    setIsLoading(true);
+  const userDisplayMessage: DisplayMessage = { text: sentText, sender: 'user' };
+  setDisplayMessages(prev => [...prev, userDisplayMessage]);
+    
+  const userMessage: ChatMessage = { role: 'user', parts: [{ text: sentText }] };
+  const currentHistory = [...chatHistory, userMessage];
+
+  setInput('');
+  setIsLoading(true);
 
     try {
        const { response: aiResponse, audio: audioContent } = await getChatResponse(
@@ -158,6 +166,54 @@ const ChatAssistant: React.FC = () => {
 
       if (audioContent) {
           playAudio(audioContent);
+      }
+
+      // Emergency detection: if the user's message looks like a serious symptom, try to find nearby hospitals.
+      try {
+        const emergencyKeywords = [
+          'chest pain', 'sharp pain', 'shortness of breath', 'difficulty breathing', 'unconscious', 'fainting', 'severe bleeding', 'heavy bleeding', 'stroke', 'heart attack', 'loss of consciousness', 'not breathing', 'collapse'
+        ];
+        const lowerSent = sentText.toLowerCase();
+        const isEmergency = emergencyKeywords.some(k => lowerSent.includes(k));
+
+        if (isEmergency) {
+          // Inform the user we're trying to locate nearby hospitals
+          const infoMsg: DisplayMessage = { sender: 'ai', text: "I detected signs of a possible medical emergency. I'm attempting to find nearby hospitals—please allow location access if prompted." };
+          setDisplayMessages(prev => [...prev, infoMsg]);
+          setIsSearchingHospitals(true);
+          setEmergencyHospitals(null);
+          setEmergencySummary(null);
+
+          // Try browser geolocation first
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+              try {
+                const { latitude, longitude } = position.coords;
+                const res = await findNearbyHospitals({ lat: latitude, lon: longitude });
+                setEmergencyHospitals(res.hospitals || []);
+                setEmergencySummary(res.summary || 'Nearby hospitals found:');
+                setIsSearchingHospitals(false);
+                // Append a summary AI message
+                const hospitalsMsg: DisplayMessage = { sender: 'ai', text: res.summary || 'I found some hospitals near you.' };
+                setDisplayMessages(prev => [...prev, hospitalsMsg]);
+              } catch (err: any) {
+                setIsSearchingHospitals(false);
+                const failMsg: DisplayMessage = { sender: 'ai', text: 'I was unable to fetch nearby hospitals automatically. Please try the Hospitals page or enter your location manually.' };
+                setDisplayMessages(prev => [...prev, failMsg]);
+              }
+            }, (geoErr) => {
+              setIsSearchingHospitals(false);
+              const geoMsg: DisplayMessage = { sender: 'ai', text: 'Location access denied or unavailable. Please open the Hospitals page and enter your location to search for nearby hospitals.' };
+              setDisplayMessages(prev => [...prev, geoMsg]);
+            }, { timeout: 8000 });
+          } else {
+            setIsSearchingHospitals(false);
+            const noGeoMsg: DisplayMessage = { sender: 'ai', text: 'Geolocation is not supported by your browser. Please open the Hospitals page and search manually.' };
+            setDisplayMessages(prev => [...prev, noGeoMsg]);
+          }
+        }
+      } catch (e) {
+        console.error('Error during emergency hospital lookup:', e);
       }
 
     } catch (error) {
@@ -255,7 +311,24 @@ const ChatAssistant: React.FC = () => {
                     : 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none'
                 }`}
               >
-                {msg.text}
+                {msg.sender === 'ai' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ node, ...props }) => (
+                        // @ts-ignore - props align with react-markdown's link props
+                        <a {...props} target="_blank" rel="noopener noreferrer" className="text-red-600 underline" />
+                      ),
+                      // render paragraphs without extra margins inside the chat bubble
+                      p: ({ node, ...props }) => <p {...props} className="m-0" />,
+                      li: ({ node, ...props }) => <li {...props} className="ml-4 list-disc" />,
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
+                ) : (
+                  msg.text
+                )}
               </div>
             </div>
           ))}
@@ -269,6 +342,28 @@ const ChatAssistant: React.FC = () => {
                         <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
                     </div>
                 </div>
+            </div>
+          )}
+          {/* Emergency hospitals panel */}
+          {isSearchingHospitals && (
+            <div className="text-center p-4">
+              <div className="w-10 h-10 border-4 border-red-500 border-dashed rounded-full animate-spin mx-auto"></div>
+              <p className="mt-3 text-gray-600 dark:text-gray-300">Searching for nearby hospitals...</p>
+            </div>
+          )}
+
+          {emergencyHospitals && emergencyHospitals.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 p-4 rounded-xl shadow mt-4 border border-gray-200 dark:border-gray-800">
+              <h4 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">Nearby Hospitals</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{emergencySummary}</p>
+              <div className="space-y-2">
+                {emergencyHospitals.map((h, idx) => (
+                  <a key={idx} href={h.uri} target="_blank" rel="noopener noreferrer" className="block p-3 bg-gray-50 dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 hover:border-red-500 dark:hover:border-red-500">
+                    <p className="font-semibold text-red-600">{h.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Click to view on map</p>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
           <div ref={messagesEndRef} />

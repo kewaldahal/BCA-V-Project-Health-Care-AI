@@ -19,7 +19,7 @@ app.use('/auth', authRoutes);
 app.use('/ai', authMiddleware, aiRoutes);
 
 app.get('/', (req, res) => {
-    res.send('Health AI Backend is running!');
+    res.send('Health Care AI Backend is running!');
 });
 
 const PORT = process.env.PORT || 3001;

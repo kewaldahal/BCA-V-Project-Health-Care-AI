@@ -129,7 +129,7 @@ router.post('/find-hospitals', async (req, res) => {
         const result = await findHospitalsNearLocation({ latitude: lat, longitude: lon, query });
         res.json(result);
     } catch (error) {
-        console.error("Error in /find-hospitals route:", error);
+        console.error("Error in /find- route:", error);
         res.status(500).json({ error: error.message || "An internal error occurred while finding hospitals." });
     }
 });

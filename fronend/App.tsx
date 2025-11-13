@@ -192,7 +192,7 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
       <footer className="text-center p-4 text-xs text-gray-500 dark:text-gray-400">
-        Health AI &copy; {new Date().getFullYear()}. This is a prototype and not a substitute for professional medical advice.
+        Health Care AI &copy; {new Date().getFullYear()}. This is a prototype and not a substitute for professional medical advice.
       </footer>
     </div>
   );

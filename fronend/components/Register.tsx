@@ -37,7 +37,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, switchToLogin, error })
                  <div className="text-center">
                      <div className="flex items-center justify-center space-x-2 mb-4">
                         <PulseIcon className="h-10 w-10 text-red-600" />
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Health AI</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Health Care AI</h1>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Create Your Account</h2>
                     <p className="text-gray-500 dark:text-gray-400">Join to get personalized health insights.</p>

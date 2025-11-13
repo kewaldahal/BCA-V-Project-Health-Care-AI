@@ -47,7 +47,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, onLogout
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => onNavigate(Page.Dashboard)}>
             <PulseIcon className="h-8 w-8 text-red-600" />
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Health AI</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Health Care AI</h1>
           </div>
           <nav className="flex items-center space-x-2 sm:space-x-4">
             <NavItem
