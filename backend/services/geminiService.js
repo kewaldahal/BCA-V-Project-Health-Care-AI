@@ -165,7 +165,7 @@ async function textToSpeech(text, voice, model) {
 
 async function getChatResponseTextOnly(message, history, userContext) {
     return await retryWithBackoff(async () => {
-        const model = aiChat.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = aiChat.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const chat = model.startChat({
             history: history || [],
@@ -195,7 +195,7 @@ async function getChatResponseTextOnly(message, history, userContext) {
 }
 
 async function getChatResponse(message, history, userContext, voiceConfig) {
-    const model = 'gemini-1.5-flash'; // Upgraded model for potentially faster and better responses
+    const model = 'gemini-2.5-flash'; // Use a supported gemini model
 
     let systemInstruction = 'You are a friendly and helpful AI health assistant providing information relevant to Nepal. You can answer general health questions. When providing emergency contact information, use Nepali emergency numbers (e.g., Police: 100, Ambulance: 102). You are not a doctor and must always remind the user to consult a healthcare professional for medical advice. Keep your answers concise and easy to understand. Do Not Reply if User Answers are Inappropriate or Irrelevant or out of Context. Answer only Medical Related Questions.';
 
@@ -259,7 +259,7 @@ const symptomPredictionSchema = {
 };
 
 const predictSymptomsFromText = async (symptomsText, userContext = null) => {
-    const primaryModel = 'gemini-1.5-flash';
+    const primaryModel = 'gemini-2.5-flash';
     const fallbackModel = 'gemini-pro'; // A reliable fallback
 
     let prompt = `You are an AI Symptom Checker. Analyze the following symptoms for a user and provide a list of potential diseases. For each disease, include its probability, a brief description, and the recommended medical specialist. IMPORTANT: This is for informational purposes only and is not a substitute for professional medical advice. Symptoms: "${symptomsText}"`;
