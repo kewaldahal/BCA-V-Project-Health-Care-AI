@@ -188,10 +188,12 @@ const App: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-black text-gray-900 dark:text-gray-100 font-sans">
       <Header currentPage={currentPage} onNavigate={handleNavigate} user={user} onLogout={handleLogout} />
-      <main className="flex-1 min-h-0 overflow-auto container mx-auto p-4 sm:p-6 lg:p-8">
-        {renderContent()}
+      <main className="flex-1 min-h-0 overflow-y-auto">
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8 h-full">
+          {renderContent()}
+        </div>
       </main>
-      <footer className="text-center p-4 text-xs text-gray-500 dark:text-gray-400">
+      <footer className="text-center p-4 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800">
         Health Care AI &copy; {new Date().getFullYear()}. This is a prototype and not a substitute for professional medical advice.
       </footer>
     </div>

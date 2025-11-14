@@ -26,7 +26,7 @@ const aiMaps = new GoogleGenAI({ apiKey: MAPS_API_KEY });
  * @param {number} delay Initial delay in milliseconds.
  * @returns {Promise<any>} The result of the successful function execution.
  */
-const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
+const retryWithBackoff = async (fn, retries = 5, delay = 1000, jitter = 200) => {
     let lastError;
     for (let i = 0; i < retries; i++) {
         try {
@@ -35,8 +35,10 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
             lastError = error;
             // Only retry on 5xx server errors (e.g., 503 Service Unavailable)
             if (error.status && error.status >= 500 && error.status < 600) {
-                console.warn(`Attempt ${i + 1} failed with status ${error.status}. Retrying in ${delay}ms...`);
-                await new Promise(res => setTimeout(res, delay));
+                const jitterDelay = Math.random() * jitter;
+                const waitTime = delay + jitterDelay;
+                console.warn(`Attempt ${i + 1} failed with status ${error.status}. Retrying in ${waitTime.toFixed(0)}ms...`);
+                await new Promise(res => setTimeout(res, waitTime));
                 delay *= 2; // Exponential backoff
             } else {
                 // Don't retry on client errors (4xx) or other non-retryable issues
@@ -131,7 +133,7 @@ const analyzeHealthReport = async ({ reportText, fileData }) => {
     }
 };
 
-const textToSpeech = async (text, voiceName = 'Zephyr') => {
+async function textToSpeech(text, voice, model) {
     try {
         const prompt = `Say: ${text}`;
         
@@ -142,7 +144,7 @@ const textToSpeech = async (text, voiceName = 'Zephyr') => {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: {
                     voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: voiceName },
+                        prebuiltVoiceConfig: { voiceName: voice },
                     },
                 },
             },
@@ -159,10 +161,41 @@ const textToSpeech = async (text, voiceName = 'Zephyr') => {
         // Return null instead of throwing, so the chat can still proceed with text.
         return null;
     }
-};
+}
 
-const getChatResponse = async (message, history = [], userContext = null, voiceConfig = { enabled: false, voice: 'Zephyr' }) => {
-    const model = 'gemini-2.5-flash';
+async function getChatResponseTextOnly(message, history, userContext) {
+    return await retryWithBackoff(async () => {
+        const model = aiChat.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const chat = model.startChat({
+            history: history || [],
+        });
+
+        const personalizedPrompt = `
+            You are a compassionate and highly knowledgeable medical AI assistant. 
+            Your name is "Health-Care-AI".
+            User Context: 
+            - Age: ${userContext?.age || 'Not provided'}
+            - Weight: ${userContext?.weight || 'Not provided'}
+            - Known Medical Conditions: ${userContext?.medical_conditions || 'None'}
+            - Current Symptoms: ${userContext?.symptoms || 'None'}
+
+            Based on this context and the conversation history, provide a helpful, safe, and informative response. 
+            **Disclaimer: Always remind the user that you are an AI and they should consult a real doctor for medical advice.**
+            
+            User's message: "${message}"
+        `;
+
+        const result = await chat.sendMessage(personalizedPrompt);
+        const response = await result.response;
+        const text = response.text();
+
+        return { response: text };
+    });
+}
+
+async function getChatResponse(message, history, userContext, voiceConfig) {
+    const model = 'gemini-1.5-flash'; // Upgraded model for potentially faster and better responses
 
     let systemInstruction = 'You are a friendly and helpful AI health assistant providing information relevant to Nepal. You can answer general health questions. When providing emergency contact information, use Nepali emergency numbers (e.g., Police: 100, Ambulance: 102). You are not a doctor and must always remind the user to consult a healthcare professional for medical advice. Keep your answers concise and easy to understand. Do Not Reply if User Answers are Inappropriate or Irrelevant or out of Context. Answer only Medical Related Questions.';
 
@@ -179,15 +212,25 @@ const getChatResponse = async (message, history = [], userContext = null, voiceC
     });
 
     try {
+        // Get the text response first.
         const response = await retryWithBackoff(() => chat.sendMessage({ message }));
         const responseText = response.text;
 
-        let audioContent = null;
+        // Generate audio in parallel, but don't wait for it to return the text.
+        let audioPromise = null;
         if (voiceConfig.enabled && responseText) {
-            audioContent = await textToSpeech(responseText, voiceConfig.voice);
+            audioPromise = textToSpeech(responseText, voiceConfig.voice);
         }
 
-        return { response: responseText, audio: audioContent };
+        // Return the text response immediately.
+        const result = { response: responseText, audio: null };
+
+        // If audio is being generated, wait for it and then include it.
+        if (audioPromise) {
+            result.audio = await audioPromise;
+        }
+
+        return result;
     } catch (error) {
         console.error("Error getting chat response:", error);
         throw new Error("Could not get a response from the assistant.");
@@ -215,18 +258,41 @@ const symptomPredictionSchema = {
     required: ["predictions"],
 };
 
-const predictSymptomsFromText = async (symptomsText) => {
-    try {
-        const prompt = `You are an AI Symptom Checker. Analyze the following symptoms and provide a list of potential diseases. For each disease, include its probability, a brief description, and the recommended medical specialist. IMPORTANT: This is for informational purposes only and is not a substitute for professional medical advice. Symptoms: "${symptomsText}"`;
+const predictSymptomsFromText = async (symptomsText, userContext = null) => {
+    const primaryModel = 'gemini-1.5-flash';
+    const fallbackModel = 'gemini-pro'; // A reliable fallback
 
-        const response = await retryWithBackoff(() => aiSymptoms.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
+    let prompt = `You are an AI Symptom Checker. Analyze the following symptoms for a user and provide a list of potential diseases. For each disease, include its probability, a brief description, and the recommended medical specialist. IMPORTANT: This is for informational purposes only and is not a substitute for professional medical advice. Symptoms: "${symptomsText}"`;
+
+    if (userContext) {
+        prompt += `\n\nUser context: Age: ${userContext.age}, Pre-existing conditions: ${userContext.medical_conditions || 'None'}.`;
+    }
+
+    const generate = async (model) => {
+        console.log(`Attempting symptom prediction with model: ${model}`);
+        return await retryWithBackoff(() => aiSymptoms.models.generateContent({
+            model,
+            contents: [{ parts: [{ text: prompt }] }],
             config: {
                 responseMimeType: "application/json",
                 responseSchema: symptomPredictionSchema,
             },
         }));
+    };
+
+    try {
+        let response;
+        try {
+            response = await generate(primaryModel);
+        } catch (error) {
+            // If the primary model is overloaded (503), try the fallback.
+            if (error.status === 503) {
+                console.warn(`Primary model (${primaryModel}) is overloaded. Switching to fallback model (${fallbackModel}).`);
+                response = await generate(fallbackModel);
+            } else {
+                throw error; // Re-throw other errors
+            }
+        }
         
         const jsonText = response.text.trim();
         const parsedJson = JSON.parse(jsonText);
@@ -347,4 +413,4 @@ const generateHealthTips = async (analysisData) => {
 };
 
 
-module.exports = { analyzeHealthReport, getChatResponse, predictSymptomsFromText, findHospitalsNearLocation, generateHealthTips };
+module.exports = { analyzeHealthReport, getChatResponse, getChatResponseTextOnly, predictSymptomsFromText, findHospitalsNearLocation, generateHealthTips };

@@ -24,6 +24,20 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
   const [showManualHospitalInput, setShowManualHospitalInput] = useState(false);
   const [manualLocation, setManualLocation] = useState('');
 
+  const handleFetchTips = async () => {
+    if (!analysisResult) return;
+    setIsLoadingTips(true);
+    try {
+      const fetchedTips = await getHealthTips(analysisResult);
+      setTips(fetchedTips);
+    } catch (error) {
+      console.error("Failed to fetch health tips:", error);
+      setTips([]); // Clear tips on error
+    } finally {
+      setIsLoadingTips(false);
+    }
+  };
+
   const handleHospitalApiSearch = async (location: { lat?: number; lon?: number; query?: string }) => {
     if (!analysisResult || analysisResult.predictions.length === 0) return;
 
@@ -173,27 +187,8 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
 
   useEffect(() => {
     if (analysisResult) {
-      const fetchTips = async () => {
-        setIsLoadingTips(true);
-        try {
-          const fetchedTips = await getHealthTips(analysisResult);
-          setTips(fetchedTips);
-        } catch (error) {
-          console.error("Failed to fetch health tips:", error);
-          setTips([]); // Clear tips on error
-        } finally {
-          setIsLoadingTips(false);
-        }
-      };
-      fetchTips();
-    }
-  }, [analysisResult]);
-
-  useEffect(() => {
-    if (analysisResult && analysisResult.predictions.length > 0) {
-      handleFindHospitals();
-    } else {
-      // Reset hospital state if there's no analysis
+      // Reset states when a new analysis comes in
+      setTips([]);
       setHospitalResult(null);
       setHospitalError(null);
       setIsLoadingHospitals(false);
@@ -239,6 +234,12 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
                                 <p className="text-sm text-gray-600 dark:text-gray-300">{analysisResult.summary}</p>
                             </div>
                         </div>
+                        <div className="mt-6 text-center">
+                            <button onClick={handleFindHospitals} className="inline-flex items-center px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-colors">
+                                <HospitalIcon className="h-5 w-5 mr-2" />
+                                Find Nearby Hospitals
+                            </button>
+                        </div>
                     </div>
                      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
                         <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Potential Health Risks</h3>
@@ -263,6 +264,15 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
                             <BotIcon className="w-6 h-6 text-red-500"/>
                             AI Health Tips
                         </h2>
+                        {tips.length === 0 && !isLoadingTips && (
+                            <div className="text-center">
+                                <p className="text-gray-600 dark:text-gray-400 mb-4">Click the button to generate personalized health tips and suggestions based on your report.</p>
+                                <button onClick={handleFetchTips} className="inline-flex items-center px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 transition-colors">
+                                    <BotIcon className="h-5 w-5 mr-2" />
+                                    Generate Health Tips
+                                </button>
+                            </div>
+                        )}
                         {isLoadingTips ? (
                             <div className="space-y-3 animate-pulse">
                                 <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
@@ -270,9 +280,11 @@ const Dashboard: React.FC<DashboardProps> = ({ analysisResult, onNewAnalysis, us
                                 <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
                             </div>
                         ) : (
-                            <ul className="list-disc list-inside space-y-3 text-gray-600 dark:text-gray-300">
-                            {tips.map((tip, index) => <li key={index}>{tip}</li>)}
-                            </ul>
+                            tips.length > 0 && (
+                                <ul className="list-disc list-inside space-y-3 text-gray-600 dark:text-gray-300">
+                                    {tips.map((tip, index) => <li key={index}>{tip}</li>)}
+                                </ul>
+                            )
                         )}
                     </div>
                     

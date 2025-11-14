@@ -180,23 +180,27 @@ const ChatAssistant: React.FC = () => {
 
     stopAudio();
 
-  const sentText = input.trim();
+    const sentText = input.trim();
 
-  const userDisplayMessage: DisplayMessage = { text: sentText, sender: 'user' };
-  setDisplayMessages(prev => [...prev, userDisplayMessage]);
+    const userDisplayMessage: DisplayMessage = { text: sentText, sender: 'user' };
+    setDisplayMessages(prev => [...prev, userDisplayMessage]);
     
-  const userMessage: ChatMessage = { role: 'user', parts: [{ text: sentText }] };
-  const currentHistory = [...chatHistory, userMessage];
+    const userMessage: ChatMessage = { role: 'user', parts: [{ text: sentText }] };
+    const currentHistory = [...chatHistory, userMessage];
 
-  setInput('');
-  setIsLoading(true);
+    setInput('');
+    setIsLoading(true);
 
     try {
-       const { response: aiResponse, audio: audioContent } = await getChatResponse(
-          input, 
+      const { response: aiResponse, audio: audioContent } = await getChatResponse(
+          sentText, 
           currentHistory, 
           { enabled: isVoiceEnabled, voice: selectedVoice }
       );
+
+      if (!aiResponse) {
+          throw new Error("Received an empty response from the server.");
+      }
 
       const aiDisplayMessage: DisplayMessage = { text: aiResponse, sender: 'ai' };
       const aiMessage: ChatMessage = { role: 'model', parts: [{ text: aiResponse }] };

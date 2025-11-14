@@ -1,5 +1,5 @@
 const express = require('express');
-const { analyzeHealthReport, getChatResponse, predictSymptomsFromText, findHospitalsNearLocation, generateHealthTips } = require('../services/geminiService');
+const { analyzeHealthReport, getChatResponse, getChatResponseTextOnly, predictSymptomsFromText, findHospitalsNearLocation, generateHealthTips } = require('../services/geminiService');
 const db = require('../database.js');
 
 const router = express.Router();
@@ -78,7 +78,6 @@ router.post('/analyze', async (req, res) => {
     }
 });
 
-
 router.post('/chat', async (req, res) => {
     const { message, history, voiceConfig } = req.body;
     const userId = req.user.id;
@@ -92,7 +91,6 @@ router.post('/chat', async (req, res) => {
     db.get(userSql, [userId], async (err, userContext) => {
         if (err) {
             console.error("DB error fetching user context:", err.message);
-            // Proceed without personalization if user fetch fails
             userContext = null; 
         }
         
@@ -100,22 +98,24 @@ router.post('/chat', async (req, res) => {
             // Persist the user's message
             try {
                 const insertSql = `INSERT INTO chats (user_id, role, message, metadata) VALUES (?,?,?,?)`;
-                db.run(insertSql, [userId, 'user', message, JSON.stringify({ fromFrontend: true })], function(insertErr) {
-                    if (insertErr) console.error('DB error inserting user chat:', insertErr.message);
-                });
+                db.run(insertSql, [userId, 'user', message, JSON.stringify({ fromFrontend: true })]);
             } catch (dbErr) {
                 console.error('Unexpected DB error saving user message:', dbErr);
             }
 
-            const responseData = await getChatResponse(message, history, userContext, voiceConfig);
+            let responseData;
+            // Decide which service to call based on voiceConfig
+            if (voiceConfig && voiceConfig.enabled) {
+                responseData = await getChatResponse(message, history, userContext, voiceConfig);
+            } else {
+                responseData = await getChatResponseTextOnly(message, history, userContext);
+            }
 
             // Persist the AI response
             try {
                 const aiText = responseData.response || '';
                 const insertSql2 = `INSERT INTO chats (user_id, role, message, metadata) VALUES (?,?,?,?)`;
-                db.run(insertSql2, [userId, 'ai', aiText, JSON.stringify({ generatedBy: 'gemini' })], function(insertErr) {
-                    if (insertErr) console.error('DB error inserting ai chat:', insertErr.message);
-                });
+                db.run(insertSql2, [userId, 'ai', aiText, JSON.stringify({ generatedBy: 'gemini' })]);
             } catch (dbErr) {
                 console.error('Unexpected DB error saving ai message:', dbErr);
             }
